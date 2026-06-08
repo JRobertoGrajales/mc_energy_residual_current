@@ -21,7 +21,7 @@ void EnergyResidualCurrent::init(mc_control::MCGlobalController & controller, co
     ctl.controller().datastore().make<bool>("Obstacle detected", false);
   }
 
-  ctl.controller().datastore().make<bool>("Energy Residual Obstacle detected", false);
+  ctl.controller().datastore().make<bool>("Energy Residual Current Obstacle detected", false);
 
   dt_ = ctl.timestep();
   counter_ = 0.0;
@@ -83,7 +83,7 @@ void EnergyResidualCurrent::init(mc_control::MCGlobalController & controller, co
   forwardDynamics = rbd::ForwardDynamics(robot.mb());
 
   forwardDynamics.computeH(robot.mb(), robot.mbc());
-  auto inertiaMatrix = forwardDynamics.H() - forwardDynamics.HIr();
+  auto inertiaMatrix = forwardDynamics.H();
   tzero = 0.5 * qdot.transpose() * inertiaMatrix * qdot;
 
   addGui(ctl);
@@ -120,16 +120,13 @@ void EnergyResidualCurrent::before(mc_control::MCGlobalController & controller)
   if(residual > residual_high_ || residual < residual_low_)
   {
     obstacle_detected_ = true;
-    if(activate_verbose) mc_rtc::log::info("[Energy Residual] Obstacle detected");
+    if(activate_verbose) mc_rtc::log::info("[Energy Residual Current] Obstacle detected");
     if(collision_stop_activated_)
     {
       ctl.controller().datastore().get<bool>("Obstacle detected") = obstacle_detected_;
     }
   }
-  // if(collision_stop_activated_zurlo_)
-  // {
-    ctl.controller().datastore().get<bool>("Energy Residual Obstacle detected") = obstacle_detected_;
-  // }
+  ctl.controller().datastore().get<bool>("Energy Residual Current Obstacle detected") = obstacle_detected_;
 }
 
 void EnergyResidualCurrent::after(mc_control::MCGlobalController & controller)
@@ -176,7 +173,7 @@ void EnergyResidualCurrent::energy_residual_computation(mc_control::MCGlobalCont
   auto coriolisMatrix = coriolis->coriolis(realRobot.mb(), realRobot.mbc());
   auto coriolisGravityTerm = forwardDynamics.C();
   auto negative_gravity = coriolisMatrix*qdot - coriolisGravityTerm;
-  auto inertiaMatrix = forwardDynamics.H() - forwardDynamics.HIr();
+  auto inertiaMatrix = forwardDynamics.H();
   double t_kinetic = 0.5 * qdot.transpose() * inertiaMatrix * qdot;
 
   integralTerm += (qdot.transpose()*(tau_m + negative_gravity - tau_fric) + residual) * ctl.timestep();
@@ -232,8 +229,11 @@ void EnergyResidualCurrent::addLog(mc_control::MCGlobalController & controller)
   auto & ctl = static_cast<mc_control::MCGlobalController &>(controller);
 
   ctl.controller().logger().addLogEntry("EnergyResidualCurrent_residual", [this]() -> const double & { return residual; });
-  ctl.controller().logger().addLogEntry("EnergyResidualCurrent_residual_high", [this]() -> const double & { return residual_high_; });
-  ctl.controller().logger().addLogEntry("EnergyResidualCurrent_residual_low", [this]() -> const double & { return residual_low_; });
+  ctl.controller().logger().addLogEntry("EnergyResidualCurrent_threshold_high", [this]() -> const double & { return residual_high_; });
+  ctl.controller().logger().addLogEntry("EnergyResidualCurrent_threshold_low", [this]() -> const double & { return residual_low_; });
+  ctl.controller().logger().addLogEntry("EnergyResidualCurrent_threshold_offset", [this]() -> const double & { return threshold_offset_; });
+  ctl.controller().logger().addLogEntry("EnergyResidualCurrent_threshold_filtering", [this]() -> const double & { return threshold_filtering_; });
+  ctl.controller().logger().addLogEntry("EnergyResidualCurrent_ko", [this]() -> const double & { return ko; });
   ctl.controller().logger().addLogEntry("EnergyResidualCurrent_obstacleDetected", [this]() -> const bool & { return obstacle_detected_; });
 }
 
@@ -246,8 +246,8 @@ void EnergyResidualCurrent::addPlot(mc_control::MCGlobalController & controller)
     "EnergyResidualCurrent",
     mc_rtc::gui::plot::X("t", [this]() { return counter_; }),
     mc_rtc::gui::plot::Y("Residual", [this]() { return residual; }, mc_rtc::gui::Color::Red),
-    mc_rtc::gui::plot::Y("Residual high", [this]() { return residual_high_; }, mc_rtc::gui::Color::Green),
-    mc_rtc::gui::plot::Y("Residual low", [this]() { return residual_low_; }, mc_rtc::gui::Color::Blue)
+    mc_rtc::gui::plot::Y("Threshold high", [this]() { return residual_high_; }, mc_rtc::gui::Color::Green),
+    mc_rtc::gui::plot::Y("Threshold low", [this]() { return residual_low_; }, mc_rtc::gui::Color::Blue)
   );
 }
 
