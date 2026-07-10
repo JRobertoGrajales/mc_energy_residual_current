@@ -49,6 +49,8 @@ private:
   std::map<std::string, double> kt;
   Eigen::VectorXd tau_fric;
   double integralTerm;
+  double energy_input;
+  double t_kinetic;
   double tzero; // kinetic energy init
   double residual;
 
